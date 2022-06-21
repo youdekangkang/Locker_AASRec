@@ -9,6 +9,8 @@ Please cite our paper if using this code. This code can run on single 2080 super
 
 <img src="https://github.com/AaronHeee/LOCKER/blob/main/img/curve.jpg" width="400"/>
 
+Code here also is only for my ML learning. I intended to apply the patterns from the model "AASRec" (hasn't been received yet, but with great results), if you have any problem with this repository here, please contact to "modekangkang@foxmail.com", if I careless break some of the law, I will delete it as soon as I can.
+
 ## Dependencies
 
 ```

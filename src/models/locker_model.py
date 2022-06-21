@@ -69,9 +69,8 @@ class Attention(nn.Module):
             self.sigmoid = nn.Sigmoid()
 
         if self.args.local_type == "CD":
-            self.ashortlen = torch.nn.Parameter(torch.empty(1))
-            torch.nn.init.ones_(self.ashortlen)
-            self.ashortlen.sigmoid()
+            # self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
+            self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.FloatTensor([10])))
             position_ids_l = torch.arange(n, dtype=torch.long).view(-1,1)
             position_ids_r = torch.arange(n, dtype=torch.long).view(1,-1)
             self.cdlen = self.args.init_val
@@ -81,11 +80,6 @@ class Attention(nn.Module):
             self.ashortlen = torch.nn.Parameter(torch.empty(1))
             torch.nn.init.ones_(self.ashortlen)
             self.ashortlen.sigmoid()
-
-
-
-
-
 
 
     def init_conv(self, channels, kernel_size=3):
@@ -170,7 +164,7 @@ class Attention(nn.Module):
         # TODO: The pattern CD is added here
         elif self.args.local_type == 'CD':
 
-            scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
+            scores_l = torch.matmul(query_g, key_g.transpose(-2, -1)) / math.sqrt(query_g.size(-1))
 
             distance_mask = self.distance.repeat(mask.shape[0],1,1).unsqueeze(1).to(scores_l.device)
             ones = torch.ones(distance_mask.shape).to(scores_l.device)
@@ -182,21 +176,16 @@ class Attention(nn.Module):
             mask_temp = mask_temp + distance_mask
 
             reweight = torch.ones(self.n, self.n).to(scores_l.device)
-            reweight = reweight.masked_fill(mask_temp == 3, 1 - self.ashortlen.item())
+            reweight = reweight.masked_fill(mask_temp == 3, self.ashortlen.item())
             reweight = reweight.masked_fill(mask_temp == 2, -MAX_VAL)
-            reweight = reweight.masked_fill(mask_temp == 1, self.ashortlen.item())
+            reweight = reweight.masked_fill(mask_temp == 1, 1-self.ashortlen.item())
             reweight = reweight.masked_fill(mask_temp == 0, -MAX_VAL)
 
-            # mask = mask & (self.distance.to(scores_l.device) <= self.cdlen)
-            # reweight = torch.ones(args.train_batch_size,1,self.n,self.n).to(scores_l.device)
-            # reweight = reweight.masked_fill(mask == 0, 1 - self.ashortlen.item())
-            # reweight = reweight.masked_fill(mask == 1, self.ashortlen.item())
-
-            # scores_l = scores_l * reweight
             scores_l = torch.matmul(scores_l,reweight)
 
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
+
 
         elif self.args.local_type == 'ZF':
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
@@ -206,7 +195,7 @@ class Attention(nn.Module):
                 torch.triu(torch.full((self.n,self.n),1-self.ashortlen.item()),diagonal=1).to(scores_l.device)
 
             scores_l = scores_l * reweight
-
+            scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
 
