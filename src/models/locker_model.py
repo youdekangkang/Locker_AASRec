@@ -30,14 +30,15 @@ class Attention(nn.Module):
             assert self.h == (self.global_num + self.local_num) and self.global_num > 0
 
         if self.args.local_type == 'conv':
-            self.convs = nn.ModuleList([self.init_conv(d_k, 2*self.args.init_val+1) for _ in range(self.local_num)])
+            self.convs = nn.ModuleList([self.init_conv(d_k, 2 * self.args.init_val + 1) for _ in range(self.local_num)])
 
         if self.args.local_type == 'rnn':
             self.args.init_val = int(self.args.init_val)
             position_ids_l = torch.arange(self.args.bert_max_len, dtype=torch.long).view(-1, 1)
-            position_ids_r = torch.arange(self.args.init_val+1, dtype=torch.long).view(1, -1)
+            position_ids_r = torch.arange(self.args.init_val + 1, dtype=torch.long).view(1, -1)
             self.distance = position_ids_l + position_ids_r
-            self.rnns = nn.ModuleList([nn.GRU(input_size=d_k, hidden_size=d_k, num_layers=1, batch_first=True) for _ in range(self.local_num)])
+            self.rnns = nn.ModuleList([nn.GRU(input_size=d_k, hidden_size=d_k, num_layers=1, batch_first=True) for _ in
+                                       range(self.local_num)])
 
         if self.args.local_type == 'win':
             position_ids_l = torch.arange(n, dtype=torch.long).view(-1, 1)
@@ -46,20 +47,20 @@ class Attention(nn.Module):
             self.window_size = self.args.init_val
 
         if self.args.local_type == 'initial':
-            self.abs_pos_emb_key = nn.Embedding(n, d_k * self.local_num) 
-            self.abs_pos_emb_query = nn.Embedding(n, d_k * self.local_num) 
+            self.abs_pos_emb_key = nn.Embedding(n, d_k * self.local_num)
+            self.abs_pos_emb_query = nn.Embedding(n, d_k * self.local_num)
             self.rel_pos_score = nn.Embedding(2 * n - 1, self.local_num) if is_relative else None
             sigma, alpha = 0.5, 1
             x = torch.arange(2 * n - 1) - n
-            init_val = (alpha * (torch.exp(-((x/sigma)**2) / 2))).unsqueeze(-1).repeat(1, self.local_num)
+            init_val = (alpha * (torch.exp(-((x / sigma) ** 2) / 2))).unsqueeze(-1).repeat(1, self.local_num)
             self.rel_pos_score.weight.data = init_val
             position_ids_l = torch.arange(n, dtype=torch.long).view(-1, 1)
             position_ids_r = torch.arange(n, dtype=torch.long).view(1, -1)
             self.distance = position_ids_r - position_ids_l + n - 1
 
         if self.args.local_type == 'adapt':
-            self.abs_pos_emb_key = nn.Embedding(n, d_k * self.local_num) 
-            self.abs_pos_emb_query = nn.Embedding(n, d_k * self.local_num) 
+            self.abs_pos_emb_key = nn.Embedding(n, d_k * self.local_num)
+            self.abs_pos_emb_query = nn.Embedding(n, d_k * self.local_num)
             self.rel_pos_emb = nn.Embedding(2 * n - 1, d_k * self.local_num)
             self.user_proj = nn.Linear(d, d_k * self.local_num)
             position_ids_l = torch.arange(n, dtype=torch.long).view(-1, 1)
@@ -69,41 +70,40 @@ class Attention(nn.Module):
             self.sigmoid = nn.Sigmoid()
 
         if self.args.local_type == "CD":
-            # self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
-            self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.FloatTensor([10])))
-            position_ids_l = torch.arange(n, dtype=torch.long).view(-1,1)
-            position_ids_r = torch.arange(n, dtype=torch.long).view(1,-1)
+            self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
+            position_ids_l = torch.arange(n, dtype=torch.long).view(-1, 1)
+            position_ids_r = torch.arange(n, dtype=torch.long).view(1, -1)
             self.cdlen = self.args.init_val
             self.distance = (position_ids_r - position_ids_l).abs()
 
         if self.args.local_type == "ZF":
-            self.ashortlen = torch.nn.Parameter(torch.empty(1))
-            torch.nn.init.ones_(self.ashortlen)
-            self.ashortlen.sigmoid()
-
+            self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
 
     def init_conv(self, channels, kernel_size=3):
-        assert (kernel_size-1) % 2 == 0
+        assert (kernel_size - 1) % 2 == 0
         kernel_size = int(kernel_size)
         return nn.Sequential(
             torch.nn.Conv1d(
-                in_channels = channels,
-                out_channels = channels,
-                kernel_size = kernel_size,
-                padding = (kernel_size-1) // 2
+                in_channels=channels,
+                out_channels=channels,
+                kernel_size=kernel_size,
+                padding=(kernel_size - 1) // 2
             ),
             torch.nn.ReLU()
         )
 
     "Compute 'Scaled Dot Product Attention"
+
     def forward(self, query, key, value, mask=None, dropout=None, stride=None, args=None, users=None):
         b, h, l, d_k = query.size()
-        query_g, key_g, value_g = query[:, :self.global_num, ...], key[:, :self.global_num, ...], value[:, :self.global_num, ...]
-        query_l, key_l, value_l = query[:, self.global_num:, ...], key[:, self.global_num:, ...], value[:, self.global_num:, ...]
+        query_g, key_g, value_g = query[:, :self.global_num, ...], key[:, :self.global_num, ...], value[:,
+                                                                                                  :self.global_num, ...]
+        query_l, key_l, value_l = query[:, self.global_num:, ...], key[:, self.global_num:, ...], value[:,
+                                                                                                  self.global_num:, ...]
         if self.args.local_type in ['initial', 'adapt']:
             index = self.distance.to(query_l.device)[-1]
-            query_l = query_l + self.abs_pos_emb_query(index).unsqueeze(0).unsqueeze(0).view(1,-1,l,d_k)
-            key_l = key_l + self.abs_pos_emb_key(index).unsqueeze(0).unsqueeze(0).view(1,-1,l,d_k)
+            query_l = query_l + self.abs_pos_emb_query(index).unsqueeze(0).unsqueeze(0).view(1, -1, l, d_k)
+            key_l = key_l + self.abs_pos_emb_key(index).unsqueeze(0).unsqueeze(0).view(1, -1, l, d_k)
 
         if self.global_num > 0:
             scores_g = torch.matmul(query_g, key_g.transpose(-2, -1)) / math.sqrt(query_g.size(-1))
@@ -118,15 +118,20 @@ class Attention(nn.Module):
             value_l = torch.matmul(p_attn_l, value_l)
 
         elif self.args.local_type == 'rnn':
-            value_l = torch.cat([value_l, torch.zeros(size=(b, self.local_num, self.args.init_val, d_k)).to(value_l.device)], dim=-2)
+            value_l = torch.cat(
+                [value_l, torch.zeros(size=(b, self.local_num, self.args.init_val, d_k)).to(value_l.device)], dim=-2)
             value_aug = value_l[:, :, self.distance.to(value_l.device), :]
             h0 = torch.zeros(1, b * l * self.local_num, d_k).to(value_l.device)
             p_attn_l = None
-            value_l = torch.cat([self.rnns[i](value_aug.view(-1, self.args.init_val+1, d_k), h0)[-1].view(b, self.local_num, l, d_k) for i in range(self.local_num)], dim=1)
+            value_l = torch.cat(
+                [self.rnns[i](value_aug.view(-1, self.args.init_val + 1, d_k), h0)[-1].view(b, self.local_num, l, d_k)
+                 for i in range(self.local_num)], dim=1)
 
         elif self.args.local_type == 'conv':
             p_attn_l = None
-            value_l = torch.cat([self.convs[i](value_l[:, i, ...].squeeze().permute(0, 2, 1)).unsqueeze(1).permute(0,1,3,2) for i in range(self.local_num)], dim=1)
+            value_l = torch.cat(
+                [self.convs[i](value_l[:, i, ...].squeeze().permute(0, 2, 1)).unsqueeze(1).permute(0, 1, 3, 2) for i in
+                 range(self.local_num)], dim=1)
 
         elif self.args.local_type == 'win':
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
@@ -141,20 +146,24 @@ class Attention(nn.Module):
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
 
-            reweight = self.rel_pos_score(self.distance.to(scores_l.device)).unsqueeze(0).permute(0,3,1,2)
+            reweight = self.rel_pos_score(self.distance.to(scores_l.device)).unsqueeze(0).permute(0, 3, 1, 2)
             scores_l = scores_l * (reweight / 0.1).sigmoid()
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
-            
+
         elif self.args.local_type == 'adapt' and self.rel_pos_emb is not None:
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
 
-            rel_pos_embedding = self.rel_pos_emb(self.distance.to(scores_l.device)).view(l, -1, self.local_num, d_k).permute(2,0,1,3).unsqueeze(0)
-            inputs = rel_pos_embedding.repeat(b,1,1,1,1) + value_l.unsqueeze(dim=-2) + value_l.unsqueeze(dim=-3) + self.user_proj(users).view(b, l, -1, d_k).permute(0,2,1,3).unsqueeze(-2)
+            rel_pos_embedding = self.rel_pos_emb(self.distance.to(scores_l.device)).view(l, -1, self.local_num,
+                                                                                         d_k).permute(2, 0, 1,
+                                                                                                      3).unsqueeze(0)
+            inputs = rel_pos_embedding.repeat(b, 1, 1, 1, 1) + value_l.unsqueeze(dim=-2) + value_l.unsqueeze(
+                dim=-3) + self.user_proj(users).view(b, l, -1, d_k).permute(0, 2, 1, 3).unsqueeze(-2)
 
-            reweight = torch.cat([self.mlps[i](inputs[:, i, ...]).squeeze(-1).unsqueeze(1) for i in range(self.local_num)], dim=1)
+            reweight = torch.cat(
+                [self.mlps[i](inputs[:, i, ...]).squeeze(-1).unsqueeze(1) for i in range(self.local_num)], dim=1)
             scores_l = scores_l + reweight
 
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
@@ -163,43 +172,44 @@ class Attention(nn.Module):
 
         # TODO: The pattern CD is added here
         elif self.args.local_type == 'CD':
+            scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
+            # scores_l = torch.matmul(query_g, key_g.transpose(-2, -1)) / math.sqrt(query_g.size(-1))
 
-            scores_l = torch.matmul(query_g, key_g.transpose(-2, -1)) / math.sqrt(query_g.size(-1))
-
-            distance_mask = self.distance.repeat(mask.shape[0],1,1).unsqueeze(1).to(scores_l.device)
+            distance_mask = self.distance.repeat(mask.shape[0], 1, 1).unsqueeze(1).to(scores_l.device)
             ones = torch.ones(distance_mask.shape).to(scores_l.device)
             zeros = torch.zeros(distance_mask.shape).to(scores_l.device)
 
-            distance_mask = torch.where(distance_mask <= self.cdlen,ones,zeros)*2
+            distance_mask = torch.where(distance_mask <= self.cdlen, ones, zeros) * 2
             mask_temp = mask.float()
-            # print(mask_temp.shape,distance_mask.shape)
             mask_temp = mask_temp + distance_mask
 
             reweight = torch.ones(self.n, self.n).to(scores_l.device)
             reweight = reweight.masked_fill(mask_temp == 3, self.ashortlen.item())
             reweight = reweight.masked_fill(mask_temp == 2, -MAX_VAL)
-            reweight = reweight.masked_fill(mask_temp == 1, 1-self.ashortlen.item())
+            reweight = reweight.masked_fill(mask_temp == 1, 1 - self.ashortlen.item())
             reweight = reweight.masked_fill(mask_temp == 0, -MAX_VAL)
 
-            scores_l = torch.matmul(scores_l,reweight)
-
-            p_attn_l = dropout(F.softmax(scores_l, dim=-1))
-            value_l = torch.matmul(p_attn_l, value_l)
-
-
-        elif self.args.local_type == 'ZF':
-            scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
-
-            # reweight = torch.ones(self.n, self.n).to(scores_l.device)
-            reweight = torch.tril(torch.full((self.n,self.n),self.ashortlen.item()),diagonal=0).to(scores_l.device) +\
-                torch.triu(torch.full((self.n,self.n),1-self.ashortlen.item()),diagonal=1).to(scores_l.device)
-
-            scores_l = scores_l * reweight
+            scores_l = torch.matmul(scores_l, reweight)
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
 
 
+        elif self.args.local_type == 'ZF':
+
+            scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
+            # scores_l = torch.matmul(query_g, key_g.transpose(-2, -1)) / math.sqrt(query_g.size(-1))
+
+            reweight = torch.tril(torch.full((self.n, self.n), 1 - self.ashortlen.item()), diagonal=0).to(scores_l.device) + \
+                torch.triu(torch.full((self.n, self.n), self.ashortlen.item()), diagonal=-1).to(scores_l.device)
+
+            reweight = reweight.repeat(mask.shape[0], 1, 1).unsqueeze(1)
+            # scores_l = scores_l * reweight
+
+            scores_l = torch.matmul(scores_l, reweight)
+            scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
+            p_attn_l = dropout(F.softmax(scores_l, dim=-1))
+            value_l = torch.matmul(p_attn_l, value_l)
 
         if self.global_num > 0:
             return torch.cat([value_g, value_l], dim=1), (p_attn_g, p_attn_l)
@@ -207,9 +217,9 @@ class Attention(nn.Module):
             return value_l, p_attn_l
 
 
-
 class MultiHeadedAttention(nn.Module):
     "Take in model size and number of heads."
+
     def __init__(self, h, d_model, dropout=0.1, max_len=50, args=None):
         super().__init__()
         assert d_model % h == 0
@@ -224,7 +234,6 @@ class MultiHeadedAttention(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, query, key, value, mask=None, output=True, stride=None, args=None, users=None):
-
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
@@ -232,7 +241,8 @@ class MultiHeadedAttention(nn.Module):
                              for l, x in zip(self.linear_layers, (query, key, value))]
 
         # 2) Apply attention on all the projected vectors in batch.
-        x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout, stride=stride, args=args, users=users)
+        x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout, stride=stride, args=args,
+                                 users=users)
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
@@ -246,17 +256,21 @@ class TransformerBlock(nn.Module):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout, att_dropout=0.2, residual=True, activate="gelu", max_len=50, args=None):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout, att_dropout=0.2, residual=True,
+                 activate="gelu", max_len=50, args=None):
         super().__init__()
-        self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden, dropout=att_dropout, max_len=max_len, args=args)
-        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout, activate=activate)
+        self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden, dropout=att_dropout, max_len=max_len,
+                                              args=args)
+        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout,
+                                                    activate=activate)
 
         self.input_sublayer = SublayerConnection(size=hidden, dropout=dropout)
         self.output_sublayer = SublayerConnection(size=hidden, dropout=dropout)
         self.residual = residual
 
     def forward(self, x, mask, stride=None, args=None, users=None):
-        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask, stride=stride, args=args, users=users))
+        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask, stride=stride, args=args,
+                                                                     users=users))
         x = self.output_sublayer(x, self.feed_forward)
         return x
 
@@ -285,17 +299,19 @@ class LOCKERModel(nn.Module):
         self.d_loss = nn.MSELoss()
 
         # embedding for BERT, sum of positional, token embeddings
-        self.embedding = BERTEmbedding(vocab_size=args.num_items+2, embed_size=self.hidden_dim, max_len=args.bert_max_len, dropout=dropout)
+        self.embedding = BERTEmbedding(vocab_size=args.num_items + 2, embed_size=self.hidden_dim,
+                                       max_len=args.bert_max_len, dropout=dropout)
 
         # multi-layers transformer blocks, deep network
         self.transformer_blocks = nn.ModuleList(
-            [TransformerBlock(self.hidden_dim, heads, self.hidden_dim * 4, dropout, att_dropout, max_len=args.bert_max_len, args=args) for _ in range(n_layers)])
+            [TransformerBlock(self.hidden_dim, heads, self.hidden_dim * 4, dropout, att_dropout,
+                              max_len=args.bert_max_len, args=args) for _ in range(n_layers)])
 
         # weights initialization
         self.init_weights()
 
         # bias for similarity calculation
-        self.bias = torch.nn.Embedding(num_embeddings=args.num_items+2, embedding_dim=1) # (num_items+2, 1)
+        self.bias = torch.nn.Embedding(num_embeddings=args.num_items + 2, embedding_dim=1)  # (num_items+2, 1)
         self.bias.weight.data.fill_(0)
 
     def forward(self, x, candidates=None, labels=None, save_name=None, users=None):
@@ -308,7 +324,8 @@ class LOCKERModel(nn.Module):
         # x = self.embedding(x, is_pos=(self.args.local_type != 'soft'))
         x = self.embedding(x, is_pos=(self.args.local_type not in ['initial', 'adapt']))
 
-        users = x.masked_fill(mask_fism==False, 0).sum(dim=-2, keepdim=True) / (mask_fism.sum(dim=-2, keepdim=True) ** 0.5)
+        users = x.masked_fill(mask_fism == False, 0).sum(dim=-2, keepdim=True) / (
+                    mask_fism.sum(dim=-2, keepdim=True) ** 0.5)
         u = users.repeat(1, x.size(1), 1)
 
         # running over multiple transformer blocks
@@ -328,7 +345,7 @@ class LOCKERModel(nn.Module):
             return logits, loss
 
     def select_predict_index(self, x):
-        return (x==self.mask_token).nonzero(as_tuple=True)
+        return (x == self.mask_token).nonzero(as_tuple=True)
 
     def init_weights(self, mean=0, std=0.02, lower=-0.04, upper=0.04):
         with torch.no_grad():
@@ -336,7 +353,7 @@ class LOCKERModel(nn.Module):
             l = (1. + math.erf(((lower - mean) / std) / math.sqrt(2.))) / 2.
             u = (1. + math.erf(((upper - mean) / std) / math.sqrt(2.))) / 2.
 
-            # sample uniformly from [2l-1, 2u-1] and map to normal 
+            # sample uniformly from [2l-1, 2u-1] and map to normal
             # distribution with the inverse error function
             for n, p in self.named_parameters():
                 if ('norm' not in n) and ('bias' not in n) and ('rel_pos_score' not in n):
@@ -347,11 +364,11 @@ class LOCKERModel(nn.Module):
 
     def similarity_score(self, x, candidates):
         if candidates is None:
-            w = self.embedding.token.weight.transpose(1,0)
-            bias = self.bias.weight.transpose(1,0) # (1, num_items)
+            w = self.embedding.token.weight.transpose(1, 0)
+            bias = self.bias.weight.transpose(1, 0)  # (1, num_items)
             return torch.matmul(x, w) + bias
         if candidates is not None:
-            x = x.unsqueeze(1) # x is (batch_size, 1, embed_size)
-            w = self.embedding.token(candidates).transpose(2,1) # (batch_size, embed_size, candidates)
-            bias = self.bias(candidates).transpose(2,1) # (batch_size, 1, candidates)
-            return (torch.bmm(x, w) + bias).squeeze(1) # (batch_size, candidates)
+            x = x.unsqueeze(1)  # x is (batch_size, 1, embed_size)
+            w = self.embedding.token(candidates).transpose(2, 1)  # (batch_size, embed_size, candidates)
+            bias = self.bias(candidates).transpose(2, 1)  # (batch_size, 1, candidates)
+            return (torch.bmm(x, w) + bias).squeeze(1)  # (batch_size, candidates)
