@@ -142,7 +142,7 @@ class Attention(nn.Module):
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
 
-        elif self.args.local_type == 'initial' and self.rel_pos_score is not None:
+`        elif self.args.local_type == 'initial' and self.rel_pos_score is not None:
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
 
@@ -151,7 +151,7 @@ class Attention(nn.Module):
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
-
+`
         elif self.args.local_type == 'adapt' and self.rel_pos_emb is not None:
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))

@@ -6,7 +6,9 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/LOCKER.iml" filepath="$PROJECT_DIR$/.idea/LOCKER.iml" />
       <module fileurl="file://$PROJECT_DIR$/../SASRec-tf1.x/.idea/SASRec-master.iml" filepath="$PROJECT_DIR$/../SASRec-tf1.x/.idea/SASRec-master.iml" />
       <module fileurl="file://$PROJECT_DIR$/../SASRec_pytorch/.idea/SASRec.pytorch.iml" filepath="$PROJECT_DIR$/../SASRec_pytorch/.idea/SASRec.pytorch.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../../../../学习/yolo_learn/Yolov5-Flask-VUE/.idea/Yolov5-Flask-VUE.iml" filepath="$PROJECT_DIR$/../../../../学习/yolo_learn/Yolov5-Flask-VUE/.idea/Yolov5-Flask-VUE.iml" />
       <module fileurl="file://$PROJECT_DIR$/../model合集/.idea/model合集.iml" filepath="$PROJECT_DIR$/../model合集/.idea/model合集.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../../../../VOCs/yolov5-5.0/.idea/yolov5-5.0.iml" filepath="$PROJECT_DIR$/../../../../VOCs/yolov5-5.0/.idea/yolov5-5.0.iml" />
     </modules>
   </component>
 </project>
