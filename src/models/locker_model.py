@@ -79,6 +79,14 @@ class Attention(nn.Module):
         if self.args.local_type == "ZF":
             self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
 
+        if self.args.local_type == 'block':
+            self.ashortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
+            self.bshortlen = torch.sigmoid(torch.nn.Parameter(torch.ones(1)))
+            position_ids_l = torch.arange(n, dtype=torch.long).view(-1, 1)
+            position_ids_r = torch.arange(n, dtype=torch.long).view(1, -1)
+            self.cdlen = self.args.init_val
+            self.distance = (position_ids_r - position_ids_l).abs()
+
     def init_conv(self, channels, kernel_size=3):
         assert (kernel_size - 1) % 2 == 0
         kernel_size = int(kernel_size)
@@ -142,7 +150,7 @@ class Attention(nn.Module):
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
 
-`        elif self.args.local_type == 'initial' and self.rel_pos_score is not None:
+        elif self.args.local_type == 'initial' and self.rel_pos_score is not None:
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
 
@@ -151,19 +159,16 @@ class Attention(nn.Module):
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
-`
+
         elif self.args.local_type == 'adapt' and self.rel_pos_emb is not None:
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
 
-            rel_pos_embedding = self.rel_pos_emb(self.distance.to(scores_l.device)).view(l, -1, self.local_num,
-                                                                                         d_k).permute(2, 0, 1,
-                                                                                                      3).unsqueeze(0)
+            rel_pos_embedding = self.rel_pos_emb(self.distance.to(scores_l.device)).view(l, -1, self.local_num,d_k).permute(2, 0, 1,3).unsqueeze(0)
             inputs = rel_pos_embedding.repeat(b, 1, 1, 1, 1) + value_l.unsqueeze(dim=-2) + value_l.unsqueeze(
                 dim=-3) + self.user_proj(users).view(b, l, -1, d_k).permute(0, 2, 1, 3).unsqueeze(-2)
 
-            reweight = torch.cat(
-                [self.mlps[i](inputs[:, i, ...]).squeeze(-1).unsqueeze(1) for i in range(self.local_num)], dim=1)
+            reweight = torch.cat([self.mlps[i](inputs[:, i, ...]).squeeze(-1).unsqueeze(1) for i in range(self.local_num)], dim=1)
             scores_l = scores_l + reweight
 
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
@@ -194,7 +199,7 @@ class Attention(nn.Module):
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
 
-
+        # TODO: the pattern ZF is added here
         elif self.args.local_type == 'ZF':
 
             scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
@@ -210,6 +215,31 @@ class Attention(nn.Module):
             scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
             p_attn_l = dropout(F.softmax(scores_l, dim=-1))
             value_l = torch.matmul(p_attn_l, value_l)
+
+        # TODO: the pattern block is added here
+        elif self.args.local_type == 'block':
+            scores_l = torch.matmul(query_l, key_l.transpose(-2, -1)) / math.sqrt(query_l.size(-1))
+
+            weight_mask = torch.zeros(self.n,self.n).to(scores_l.device)
+            for i in range(self.n):
+                weight_mask[i][i] = 1
+                extent = self.cdlen - i % self.cdlen
+                if (extent):
+                    for j in range(int(extent)):
+                        if(i+j<self.n):
+                            weight_mask[i + j][i] = 1
+                            weight_mask[i][j + i] = 1
+
+            reweight = torch.ones(self.n, self.n).to(scores_l.device)
+            reweight = reweight.masked_fill(weight_mask == 0, 1 - self.ashortlen.item())
+            reweight = reweight.masked_fill(weight_mask == 1, self.ashortlen.item())
+            scores_l = torch.matmul(scores_l, reweight)
+
+
+            scores_l = scores_l.masked_fill(mask == 0, -MAX_VAL)
+            p_attn_l = dropout(F.softmax(scores_l, dim=-1))
+            value_l = torch.matmul(p_attn_l, value_l)
+
 
         if self.global_num > 0:
             return torch.cat([value_g, value_l], dim=1), (p_attn_g, p_attn_l)

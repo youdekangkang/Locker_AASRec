@@ -4,11 +4,11 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/../BERT4Rec_Win/.idea/BERT4Rec-master.iml" filepath="$PROJECT_DIR$/../BERT4Rec_Win/.idea/BERT4Rec-master.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/LOCKER.iml" filepath="$PROJECT_DIR$/.idea/LOCKER.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../SASRec-tf1.x/.idea/SASRec-master.iml" filepath="$PROJECT_DIR$/../SASRec-tf1.x/.idea/SASRec-master.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../../../../学习/yolo_learn/PyQt5-YOLOv5/.idea/PyQt5-YOLOv5.iml" filepath="$PROJECT_DIR$/../../../../学习/yolo_learn/PyQt5-YOLOv5/.idea/PyQt5-YOLOv5.iml" />
       <module fileurl="file://$PROJECT_DIR$/../SASRec_pytorch/.idea/SASRec.pytorch.iml" filepath="$PROJECT_DIR$/../SASRec_pytorch/.idea/SASRec.pytorch.iml" />
       <module fileurl="file://$PROJECT_DIR$/../../../../学习/yolo_learn/Yolov5-Flask-VUE/.idea/Yolov5-Flask-VUE.iml" filepath="$PROJECT_DIR$/../../../../学习/yolo_learn/Yolov5-Flask-VUE/.idea/Yolov5-Flask-VUE.iml" />
       <module fileurl="file://$PROJECT_DIR$/../model合集/.idea/model合集.iml" filepath="$PROJECT_DIR$/../model合集/.idea/model合集.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../../../../VOCs/yolov5-5.0/.idea/yolov5-5.0.iml" filepath="$PROJECT_DIR$/../../../../VOCs/yolov5-5.0/.idea/yolov5-5.0.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../../../../学习/课程资料/大三下/NUS机器学习/scripts/.idea/scripts.iml" filepath="$PROJECT_DIR$/../../../../学习/课程资料/大三下/NUS机器学习/scripts/.idea/scripts.iml" />
     </modules>
   </component>
 </project>
